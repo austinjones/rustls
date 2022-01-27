@@ -1,5 +1,3 @@
-use log::info;
-
 use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::error::Error;
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
@@ -7,9 +5,7 @@ use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
 #[cfg(feature = "tls12")]
 use crate::msgs::enums::CipherSuite;
-use crate::msgs::enums::{
-    AlertDescription, Compression, ECPointFormat, ExtensionType, NamedGroup, PSKKeyExchangeMode,
-};
+use crate::msgs::enums::{AlertDescription, Compression, ECPointFormat, ExtensionType};
 use crate::msgs::enums::{HandshakeType, ProtocolVersion, SignatureScheme};
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionID;
@@ -550,7 +546,7 @@ fn fingerprint(hello: &ClientHelloPayload) -> String {
 
     for extension in &hello.extensions {
         match extension {
-            crate::msgs::handshake::ClientExtension::Protocols(v) => {}
+            // crate::msgs::handshake::ClientExtension::Protocols(v) => {}
             // crate::msgs::handshake::ClientExtension::SupportedVersions(v) => {
             //     protocol_versions = stringy(v.iter().map(ProtocolVersion::get_u16))
             // }
