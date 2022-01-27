@@ -315,6 +315,15 @@ impl ServerConnection {
         })
     }
 
+    /// Retrieves the TLS fingerprint associated with this connection
+    pub fn tls_fingerprint(&self) -> Option<&str> {
+        self.inner
+            .data
+            .tls_fingerprint
+            .as_ref()
+            .map(String::as_str)
+    }
+
     /// Retrieves the SNI hostname, if any, used to select the certificate and
     /// private key.
     ///
@@ -502,7 +511,7 @@ impl Acceptor {
         // `ALL_CIPHER_SUITES` here.
         let supported_cipher_suites = &crate::ALL_CIPHER_SUITES;
 
-        let (_, sig_schemes) = hs::process_client_hello(
+        let (_, sig_schemes, tls_fingerprint) = hs::process_client_hello(
             &message,
             false,
             supported_cipher_suites,
@@ -514,6 +523,7 @@ impl Acceptor {
             connection,
             message,
             sig_schemes,
+            tls_fingerprint,
         }))
     }
 }
@@ -525,6 +535,7 @@ pub struct Accepted {
     connection: ConnectionCommon<ServerConnectionData>,
     message: Message,
     sig_schemes: Vec<SignatureScheme>,
+    tls_fingerprint: String,
 }
 
 impl Accepted {
@@ -535,6 +546,11 @@ impl Accepted {
             &self.sig_schemes,
             Self::client_hello_payload(&self.message).get_alpn_extension(),
         )
+    }
+
+    /// Get the TLS fingerprint for this connection.
+    pub fn tls_fingerprint(&self) -> &str {
+        self.tls_fingerprint.as_str()
     }
 
     /// Convert the [`Accepted`] into a [`ServerConnection`].
@@ -671,6 +687,7 @@ pub struct ServerConnectionData {
     pub(super) sni: Option<webpki::DnsName>,
     pub(super) received_resumption_data: Option<Vec<u8>>,
     pub(super) resumption_data: Vec<u8>,
+    pub(super) tls_fingerprint: Option<String>,
     pub(super) early_data: EarlyDataState,
 }
 

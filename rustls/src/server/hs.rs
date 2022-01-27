@@ -1,3 +1,5 @@
+use log::info;
+
 use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::error::Error;
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
@@ -5,7 +7,9 @@ use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
 #[cfg(feature = "tls12")]
 use crate::msgs::enums::CipherSuite;
-use crate::msgs::enums::{AlertDescription, Compression, ExtensionType};
+use crate::msgs::enums::{
+    AlertDescription, Compression, ECPointFormat, ExtensionType, NamedGroup, PSKKeyExchangeMode,
+};
 use crate::msgs::enums::{HandshakeType, ProtocolVersion, SignatureScheme};
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionID;
@@ -410,13 +414,14 @@ impl ExpectClientHello {
 
 impl State<ServerConnectionData> for ExpectClientHello {
     fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError {
-        let (client_hello, sig_schemes) = process_client_hello(
+        let (client_hello, sig_schemes, tls_fingerprint) = process_client_hello(
             &m,
             self.done_retry,
             &self.config.cipher_suites,
             cx.common,
             cx.data,
         )?;
+        cx.data.tls_fingerprint = Some(tls_fingerprint);
         self.with_certified_key(sig_schemes, client_hello, &m, cx)
     }
 }
@@ -434,7 +439,7 @@ pub(super) fn process_client_hello<'a>(
     supported_cipher_suites: &[SupportedCipherSuite],
     common: &mut CommonState,
     data: &mut ServerConnectionData,
-) -> Result<(&'a ClientHelloPayload, Vec<SignatureScheme>), Error> {
+) -> Result<(&'a ClientHelloPayload, Vec<SignatureScheme>, String), Error> {
     let client_hello =
         require_handshake_msg!(m, HandshakeType::ClientHello, HandshakePayload::ClientHello)?;
     trace!("we got a clienthello {:?}", client_hello);
@@ -512,7 +517,79 @@ pub(super) fn process_client_hello<'a>(
         .clone();
     sig_schemes.retain(|scheme| suites::compatible_sigscheme_for_suites(*scheme, &client_suites));
 
-    Ok((client_hello, sig_schemes))
+    Ok((client_hello, sig_schemes, fingerprint(client_hello)))
+}
+
+fn fingerprint(hello: &ClientHelloPayload) -> String {
+    let version = hello.client_version.get_u16();
+
+    let cipher_suites = stringy(
+        hello
+            .cipher_suites
+            .iter()
+            .map(CipherSuite::get_u16),
+    );
+
+    // let compression_methods = stringy(
+    //     hello
+    //         .compression_methods
+    //         .iter()
+    //         .map(Compression::get_u8),
+    // );
+
+    let extensions = stringy(
+        hello
+            .extensions
+            .iter()
+            .map(|ex| ex.get_type().get_u16())
+            .filter(|v| !GREASE_TABLE.contains(v)),
+    );
+
+    let mut key_share = "".to_string();
+    let mut ec_point_formats = "".to_string();
+
+    for extension in &hello.extensions {
+        match extension {
+            crate::msgs::handshake::ClientExtension::Protocols(v) => {}
+            // crate::msgs::handshake::ClientExtension::SupportedVersions(v) => {
+            //     protocol_versions = stringy(v.iter().map(ProtocolVersion::get_u16))
+            // }
+            crate::msgs::handshake::ClientExtension::KeyShare(v) => {
+                key_share = stringy(v.iter().map(|k| k.group.get_u16()))
+            }
+            crate::msgs::handshake::ClientExtension::ECPointFormats(v) => {
+                ec_point_formats = stringy(v.iter().map(ECPointFormat::get_u8))
+            }
+            // crate::msgs::handshake::ClientExtension::PresharedKeyModes(v) => {
+            //     preshared_key_modes = stringy(v.iter().map(PSKKeyExchangeMode::get_u8))
+            // }
+            // crate::msgs::handshake::ClientExtension::SignatureAlgorithms(v) => {
+            //     signature_algorithms = stringy(v.iter().map(SignatureScheme::get_u16))
+            // }
+            // crate::msgs::handshake::ClientExtension::NamedGroups(v) => {
+            //     named_groups = stringy(v.iter().map(NamedGroup::get_u16))
+            // }
+            crate::msgs::handshake::ClientExtension::SessionTicket(_) => {}
+
+            _ => {}
+        }
+    }
+
+    format!(
+        "{},{},{},{},{}",
+        version, cipher_suites, extensions, key_share, ec_point_formats
+    )
+}
+
+const GREASE_TABLE: &'static [u16] = &[
+    0x0a0a, 0x1a1a, 0x2a2a, 0x3a3a, 0x4a4a, 0x5a5a, 0x6a6a, 0x7a7a, 0x8a8a, 0x9a9a, 0xaaaa, 0xbaba,
+    0xcaca, 0xdada, 0xeaea, 0xfafa,
+];
+fn stringy<T: Into<u64>>(data: impl Iterator<Item = T>) -> String {
+    let vec: Vec<String> = data
+        .map(|v| v.into().to_string())
+        .collect();
+    vec.join("-")
 }
 
 #[allow(clippy::large_enum_variant)]
