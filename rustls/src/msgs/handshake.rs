@@ -169,6 +169,12 @@ impl SessionID {
     }
 }
 
+impl std::hash::Hash for SessionID {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.data.hash(state);
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct UnknownExtension {
     pub typ: ExtensionType,

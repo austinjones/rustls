@@ -2,7 +2,7 @@ use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::error::Error;
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 #[cfg(feature = "logging")]
-use crate::log::{debug, trace};
+use crate::log::{debug, info, trace};
 #[cfg(feature = "tls12")]
 use crate::msgs::enums::CipherSuite;
 use crate::msgs::enums::{AlertDescription, Compression, ECPointFormat, ExtensionType};
@@ -418,6 +418,7 @@ impl State<ServerConnectionData> for ExpectClientHello {
             cx.data,
         )?;
         cx.data.tls_fingerprint = Some(tls_fingerprint);
+        cx.data.session_id = Some(client_hello.session_id.clone());
         self.with_certified_key(sig_schemes, client_hello, &m, cx)
     }
 }
@@ -565,8 +566,7 @@ fn fingerprint(hello: &ClientHelloPayload) -> String {
             // crate::msgs::handshake::ClientExtension::NamedGroups(v) => {
             //     named_groups = stringy(v.iter().map(NamedGroup::get_u16))
             // }
-            crate::msgs::handshake::ClientExtension::SessionTicket(_) => {}
-
+            // crate::msgs::handshake::ClientExtension::SessionTicket(ticket) => {}
             _ => {}
         }
     }

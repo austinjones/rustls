@@ -9,7 +9,7 @@ use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::ProtocolVersion;
 use crate::msgs::enums::SignatureScheme;
-use crate::msgs::handshake::{ClientHelloPayload, ServerExtension};
+use crate::msgs::handshake::{ClientHelloPayload, ServerExtension, SessionID};
 use crate::msgs::message::Message;
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
@@ -322,6 +322,11 @@ impl ServerConnection {
             .tls_fingerprint
             .as_ref()
             .map(String::as_str)
+    }
+
+    /// Retrieves the TLS SessionID associated with this connection
+    pub fn session_id(&self) -> Option<SessionID> {
+        self.inner.data.session_id.clone()
     }
 
     /// Retrieves the SNI hostname, if any, used to select the certificate and
@@ -688,6 +693,7 @@ pub struct ServerConnectionData {
     pub(super) received_resumption_data: Option<Vec<u8>>,
     pub(super) resumption_data: Vec<u8>,
     pub(super) tls_fingerprint: Option<String>,
+    pub(super) session_id: Option<SessionID>,
     pub(super) early_data: EarlyDataState,
 }
 
