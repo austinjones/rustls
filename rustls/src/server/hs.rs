@@ -5,7 +5,7 @@ use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, info, trace};
 #[cfg(feature = "tls12")]
 use crate::msgs::enums::CipherSuite;
-use crate::msgs::enums::{AlertDescription, Compression, ECPointFormat, ExtensionType};
+use crate::msgs::enums::{AlertDescription, Compression, ECPointFormat, ExtensionType, NamedGroup};
 use crate::msgs::enums::{HandshakeType, ProtocolVersion, SignatureScheme};
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionID;
@@ -538,11 +538,10 @@ fn fingerprint(hello: &ClientHelloPayload) -> String {
         hello
             .extensions
             .iter()
-            .map(|ex| ex.get_type().get_u16())
-            .filter(|v| !GREASE_TABLE.contains(v)),
+            .map(|ex| ex.get_type().get_u16()),
     );
 
-    let mut key_share = "".to_string();
+    let mut elliptic_curves = "".to_string();
     let mut ec_point_formats = "".to_string();
 
     for extension in &hello.extensions {
@@ -551,8 +550,8 @@ fn fingerprint(hello: &ClientHelloPayload) -> String {
             // crate::msgs::handshake::ClientExtension::SupportedVersions(v) => {
             //     protocol_versions = stringy(v.iter().map(ProtocolVersion::get_u16))
             // }
-            crate::msgs::handshake::ClientExtension::KeyShare(v) => {
-                key_share = stringy(v.iter().map(|k| k.group.get_u16()))
+            crate::msgs::handshake::ClientExtension::NamedGroups(v) => {
+                elliptic_curves = stringy(v.iter().map(NamedGroup::get_u16))
             }
             crate::msgs::handshake::ClientExtension::ECPointFormats(v) => {
                 ec_point_formats = stringy(v.iter().map(ECPointFormat::get_u8))
@@ -573,17 +572,19 @@ fn fingerprint(hello: &ClientHelloPayload) -> String {
 
     format!(
         "{},{},{},{},{}",
-        version, cipher_suites, extensions, key_share, ec_point_formats
+        version, cipher_suites, extensions, elliptic_curves, ec_point_formats
     )
 }
 
-const GREASE_TABLE: &'static [u16] = &[
+const GREASE_TABLE: &'static [u64] = &[
     0x0a0a, 0x1a1a, 0x2a2a, 0x3a3a, 0x4a4a, 0x5a5a, 0x6a6a, 0x7a7a, 0x8a8a, 0x9a9a, 0xaaaa, 0xbaba,
     0xcaca, 0xdada, 0xeaea, 0xfafa,
 ];
 fn stringy<T: Into<u64>>(data: impl Iterator<Item = T>) -> String {
     let vec: Vec<String> = data
-        .map(|v| v.into().to_string())
+        .map(|v| v.into())
+        .filter(|v| !GREASE_TABLE.contains(v))
+        .map(|v| v.to_string())
         .collect();
     vec.join("-")
 }
